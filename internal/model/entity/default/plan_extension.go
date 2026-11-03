@@ -6,6 +6,8 @@ import (
 	"strings"
 	dao "unibee/internal/dao/default"
 	"unibee/utility"
+
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 type PlanMultiCurrency struct {
@@ -123,6 +125,10 @@ func ExchangeAmountToCurrency(ctx context.Context, merchantId uint64, amount int
 			}
 		}
 	}
-	utility.Assert(false, fmt.Sprintf("Exchange: No currency(%s) config found for merchant(%d)", targetCurrency, merchantId))
+	// No exchange-rate config found for this merchant/currency pair. This used to panic
+	// (utility.Assert(false, ...)), which crashes the unrecovered renewal-cron walk for any
+	// subscription whose discount code targets an unconfigured currency, stalling the whole
+	// dunning batch behind it. Fall back to the un-exchanged amount and log instead.
+	g.Log().Warningf(ctx, "ExchangeAmountToCurrency: No currency(%s) config found for merchant(%d), falling back to source amount", targetCurrency, merchantId)
 	return amount
 }

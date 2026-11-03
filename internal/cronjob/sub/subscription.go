@@ -41,15 +41,27 @@ func TaskForSubscriptionBillingCycleDunningInvoice(ctx context.Context, taskName
 	}
 
 	for _, sub := range subs {
-		walk, err := cycle.SubPipeBillingCycleWalk(ctx, sub.SubscriptionId, timeNow, taskName)
-		if err != nil {
-			g.Log().Errorf(ctx, "TaskForSubscriptionBillingCycleDunningInvoice SubPipeBillingCycleWalk SubId:%s error:%s", sub.SubscriptionId, err.Error())
-		}
-		g.Log().Debugf(ctx, "TaskForSubscriptionBillingCycleDunningInvoice SubPipeBillingCycleWalk SubId:%s WalkResult:%s", sub.SubscriptionId, utility.MarshalToJsonString(walk))
+		walkOneSubscriptionSafely(ctx, sub, timeNow, taskName)
 		time.Sleep(2 * time.Second)
 	}
 
 	g.Log().Debug(ctx, taskName, "End......")
+}
+
+// walkOneSubscriptionSafely runs SubPipeBillingCycleWalk for a single subscription and recovers
+// from any panic, so one bad subscription (e.g. a discount/currency edge case) can't stall or
+// crash the rest of the batch behind it in TaskForSubscriptionBillingCycleDunningInvoice.
+func walkOneSubscriptionSafely(ctx context.Context, sub *entity.Subscription, timeNow int64, taskName string) {
+	defer func() {
+		if r := recover(); r != nil {
+			g.Log().Errorf(ctx, "TaskForSubscriptionBillingCycleDunningInvoice SubPipeBillingCycleWalk SubId:%s PANIC recovered:%v", sub.SubscriptionId, r)
+		}
+	}()
+	walk, err := cycle.SubPipeBillingCycleWalk(ctx, sub.SubscriptionId, timeNow, taskName)
+	if err != nil {
+		g.Log().Errorf(ctx, "TaskForSubscriptionBillingCycleDunningInvoice SubPipeBillingCycleWalk SubId:%s error:%s", sub.SubscriptionId, err.Error())
+	}
+	g.Log().Debugf(ctx, "TaskForSubscriptionBillingCycleDunningInvoice SubPipeBillingCycleWalk SubId:%s WalkResult:%s", sub.SubscriptionId, utility.MarshalToJsonString(walk))
 }
 
 func TaskForSubscriptionTrackAfterCancelledOrExpired(ctx context.Context, taskName string) {
